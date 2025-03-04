@@ -5,7 +5,7 @@ info:
   description: |-
     Issue, hold, transfer and redeem tokens. Backed by a distributed ledger,
     preserving privacy using Zero Knowledge Proofs. This API definition fronts 4 different services, which each play a different
-    role in the ecosystem. 
+    role in the ecosystem.
 
     To try it out, let the Issuer issue some funds to one of the users. Watch the balances
     get updated and see the transaction history. Transfer it to another account, or redeem
@@ -81,6 +81,22 @@ paths:
               $ref: "#/components/schemas/TransferRequest"
       operationId: issue
       summary: Issue tokens of any kind to an account
+
+  /issuer/history:
+    servers:
+      - url: http://localhost:9100/api/v1/
+        description: issuer
+    summary: Get all historical issuance
+    get:
+      summary: Get all historical issuance
+      tags:
+        - issuer
+      operationId: issuerHistory
+      responses:
+        "200":
+          $ref: "#/components/responses/IssuanceHistorySuccess"
+        default:
+          $ref: "#/components/responses/ErrorResponse"
 
   # Owner
   /owner/accounts:
@@ -273,6 +289,24 @@ components:
                 type: array
                 items:
                   $ref: "#/components/schemas/TransactionRecord"
+    IssuanceHistorySuccess:
+      description: Success response
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - message
+              - payload
+            properties:
+              message:
+                type: string
+                example: "issuance history retrieved"
+              payload:
+                type: array
+                items:
+                  type: string
+                  description: Transaction id
     TransferSuccess:
       description: Success response
       content:

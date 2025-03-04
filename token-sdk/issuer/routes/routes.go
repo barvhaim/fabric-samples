@@ -47,3 +47,25 @@ func (c Controller) Issue(ctx context.Context, request IssueRequestObject) (Issu
 		},
 	}, nil
 }
+
+// Get all transactions for an account
+// (GET /issuer/accounts/{id}/transactions)
+func (c Controller) IssuerHistory(ctx context.Context, request IssuerHistoryRequestObject) (IssuerHistoryResponseObject, error) {
+	txs, err := c.Service.GetHistory()
+	if err != nil {
+		return IssuerHistorydefaultJSONResponse{
+			Body: Error{
+				Message: "can't get transactions",
+				Payload: err.Error(),
+			},
+			StatusCode: 500,
+		}, nil
+	}
+
+	return IssuerHistory200JSONResponse{
+		IssuanceHistorySuccessJSONResponse{
+			Message: "retrieved transactions",
+			Payload: txs,
+		},
+	}, nil
+}

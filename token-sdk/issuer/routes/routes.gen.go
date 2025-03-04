@@ -67,6 +67,12 @@ type HealthSuccess struct {
 	Message string `json:"message"`
 }
 
+// IssuanceHistorySuccess defines model for IssuanceHistorySuccess.
+type IssuanceHistorySuccess struct {
+	Message string   `json:"message"`
+	Payload []string `json:"payload"`
+}
+
 // IssueSuccess defines model for IssueSuccess.
 type IssueSuccess struct {
 	Message string `json:"message"`
@@ -80,13 +86,16 @@ type IssueJSONRequestBody = TransferRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-
+	// Returns 200 if the service is healthy
 	// (GET /healthz)
 	Healthz(ctx echo.Context) error
-	// Issue tokens to an account
+	// Get all historical issuance
+	// (GET /issuer/history)
+	IssuerHistory(ctx echo.Context) error
+	// Issue tokens of any kind to an account
 	// (POST /issuer/issue)
 	Issue(ctx echo.Context) error
-
+	// Returns 200 if the service is ready to accept calls
 	// (GET /readyz)
 	Readyz(ctx echo.Context) error
 }
@@ -102,6 +111,15 @@ func (w *ServerInterfaceWrapper) Healthz(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.Healthz(ctx)
+	return err
+}
+
+// IssuerHistory converts echo context to params.
+func (w *ServerInterfaceWrapper) IssuerHistory(ctx echo.Context) error {
+	var err error
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.IssuerHistory(ctx)
 	return err
 }
 
@@ -152,6 +170,7 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	}
 
 	router.GET(baseURL+"/healthz", wrapper.Healthz)
+	router.GET(baseURL+"/issuer/history", wrapper.IssuerHistory)
 	router.POST(baseURL+"/issuer/issue", wrapper.Issue)
 	router.GET(baseURL+"/readyz", wrapper.Readyz)
 
@@ -162,6 +181,11 @@ type ErrorResponseJSONResponse Error
 type HealthSuccessJSONResponse struct {
 	// Message ok
 	Message string `json:"message"`
+}
+
+type IssuanceHistorySuccessJSONResponse struct {
+	Message string   `json:"message"`
+	Payload []string `json:"payload"`
 }
 
 type IssueSuccessJSONResponse struct {
@@ -194,6 +218,36 @@ func (response Healthz503JSONResponse) VisitHealthzResponse(w http.ResponseWrite
 	w.WriteHeader(503)
 
 	return json.NewEncoder(w).Encode(response)
+}
+
+type IssuerHistoryRequestObject struct {
+}
+
+type IssuerHistoryResponseObject interface {
+	VisitIssuerHistoryResponse(w http.ResponseWriter) error
+}
+
+type IssuerHistory200JSONResponse struct {
+	IssuanceHistorySuccessJSONResponse
+}
+
+func (response IssuerHistory200JSONResponse) VisitIssuerHistoryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type IssuerHistorydefaultJSONResponse struct {
+	Body       Error
+	StatusCode int
+}
+
+func (response IssuerHistorydefaultJSONResponse) VisitIssuerHistoryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
 }
 
 type IssueRequestObject struct {
@@ -252,13 +306,16 @@ func (response Readyz503JSONResponse) VisitReadyzResponse(w http.ResponseWriter)
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-
+	// Returns 200 if the service is healthy
 	// (GET /healthz)
 	Healthz(ctx context.Context, request HealthzRequestObject) (HealthzResponseObject, error)
-	// Issue tokens to an account
+	// Get all historical issuance
+	// (GET /issuer/history)
+	IssuerHistory(ctx context.Context, request IssuerHistoryRequestObject) (IssuerHistoryResponseObject, error)
+	// Issue tokens of any kind to an account
 	// (POST /issuer/issue)
 	Issue(ctx context.Context, request IssueRequestObject) (IssueResponseObject, error)
-
+	// Returns 200 if the service is ready to accept calls
 	// (GET /readyz)
 	Readyz(ctx context.Context, request ReadyzRequestObject) (ReadyzResponseObject, error)
 }
@@ -292,6 +349,29 @@ func (sh *strictHandler) Healthz(ctx echo.Context) error {
 		return err
 	} else if validResponse, ok := response.(HealthzResponseObject); ok {
 		return validResponse.VisitHealthzResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("Unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// IssuerHistory operation middleware
+func (sh *strictHandler) IssuerHistory(ctx echo.Context) error {
+	var request IssuerHistoryRequestObject
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.IssuerHistory(ctx.Request().Context(), request.(IssuerHistoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "IssuerHistory")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(IssuerHistoryResponseObject); ok {
+		return validResponse.VisitIssuerHistoryResponse(ctx.Response())
 	} else if response != nil {
 		return fmt.Errorf("Unexpected response type: %T", response)
 	}
@@ -353,26 +433,31 @@ func (sh *strictHandler) Readyz(ctx echo.Context) error {
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"H4sIAAAAAAAC/9RYW2/bNhT+KwfcHlqAsJymGzC/tVuxBHsp0gwb1uSBpo4tNhSpkpQzLdB/H3iRZNmy",
+	"06TBlj5F5uVcvvOdC3NHuC4rrVA5SxZ3xKCttLIYfrwzRpuLtOIXuFYOlfOfrKqk4MwJrbJPViu/ZnmB",
+	"JfNf3xtckQX5LhukZ3HXZkEqaduWkhwtN6LyQsgiqoPOAtJScoZMuuJDzTla+yAD8G9WVjIYXaK1bI1k",
+	"QfSNF1oZXaFxIvrY797tWKNvCCWuqfxF64xQa+JNNvi5FgZzsvjY373uD+rlJ+RuyrnkxMi9c2trpjie",
+	"Ceu0aR7j50FnegCISFqgiGrAoDMCN5jvO0hJxRqpWe5FCIel3Qfm0jBlGfe/QEzKSAvMGNYcBG1Q9TXw",
+	"4ZOCdgyNh4HwpE5rA7iTGy1N/gQX3pS6jo7vWFkgsLAHToMnAlJw3vQVGggCc8RyRuh2wnCde7ve/X7x",
+	"J6Fkw2SNZHEyn+/lTjzola5YLd1wZ2yFKxD8UdAr8N9O36Ca4k1StetFWAahYMksQq2Es/CitjWTsgHu",
+	"a8tLQslKm5J5G4RyP74mlJRCibIuyWLeqxLK4RrNXniCI53+/chQ8rPHEE3FjGumYeZbJ7ytDC63cO4y",
+	"PYIfebODOuM8BpEwKbg3R8U46FuF5mS/cvUXJnir+sjs2ul3wBXMQaFlbkNADHJRCVQOOpn38VlFwLrj",
+	"U5DFMn+oFEc+76fFgjygRJ+JdQESNyhhV96XZ/Iv6JiQFthS1y7AEWQ9SUpT0pHgAj/XaCdS9FxZZ+pA",
+	"CNsnqadMn6YhXcIeU1sB2iFDXwGOtd5UJ1pK+A6hj90akb+lR1pm+GCyi0Pk2a2QEpYINhBM5eC7EOZw",
+	"K1wR60Hv6ZAc98I/coB2/k9XVaFWegL5WA59GmwVRW9grIoJ+Bm8ZfwGc1g2wCAX3p5l7TAHifkaDb1S",
+	"lUGLZiPUGiojNow3UFv/6y80Gn5T+jYchfdG65WdwWUhLLx5fw45roQSoYmsjFbOwmvIxWqFxmMVZHK0",
+	"FG4LwQtAxguoJIt2pFNXymgZqmOgLte2sQ7L2ZW6UpcanGlAONC1oyAx8js4bhLTrC4RVrXKA8O06qt0",
+	"bdHYGfzBHI9hWjLpS5i9Umt0UFc58yCEgCIOgUxNMQ0bs6EMChc5rF3hcY5EpkMXulJ9cwi25Gid0Y2X",
+	"HDqUEy7MM5fhhC/XaGwM5cls7ompK1SsEmRBTmfz2WlITVeE/MhYnQunTZb02uxO5G0YC9B4QWTxcZcg",
+	"6QqhpDaSLEjhXLXIMqk5k4W2bvHTfD7PWCWyzUlG2uuWHlCTbQFjn15nEabkf7zgNYYa4CtDGH7OfUU9",
+	"S/t0PN2/ms8PZX5/LhtP4C0lP8xP7781fjiEYaUuS2YasiAX6GqjLLyaz0FEqiWig7AQffEZ7djaAzT4",
+	"Ysm1l5QF3posEeyg15HlabR+lO8HxvMwpqWB5xFAHAx99OtI5E9Gkd/G9Fd0wKRMSSc4k9BN/VtIJgXX",
+	"/4cVW4ELf8IYru2huJFY7NG6tzpvnuzpuduNJ2bu6X7cF8hRCx76kTM1to/lGD5jZgX7uqKsV8BUAzdC",
+	"5XtY/FckGxk0NsJzLAzLffW9p9b6OTs0sKVeHjHm1bYxdFcKZ0ZqG8TkTB0Rc7pXuMfGfklHeoYWZ7F7",
+	"P2PDx90njHYvlrVRLxONyCHPHtC2n2Ngupn2GwnN5dSDZzQshkAZZHlzeNi5iNvfwqwTPAluco6VA86k",
+	"tAcnn6MF9YFjI/26gkyfGYcSYPvyFHCDzE01MJpeLr6VFeGxByGHoO8dlChW4gDOFGqjkKb/qlgXl2+w",
+	"ic50Er16ry+8rAbxQe2E9DW6kAT+dYUbNM3ofZUefFwiM9GXG8TKAuteXoOCjhz7Kj4ky+PUnd6+LBfK",
+	"J8Bg4MDD9rr9NwAA//9AJPs7MhgAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
